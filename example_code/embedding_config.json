@@ -1,0 +1,13 @@
+{
+  "host_data_path": "data",
+  "input_db_path": "ClassifiedCompaniesRelational.duckdb",
+  "input_table": "ClassifiedCompaniesRelational",
+  "id_column": "CompanyNumber",
+  "text_column": "CompanyName",
+  "output_db_path": "data/output__nomic-embed-text-v1_5__company_name.duckdb",
+  "output_table": "ClassifiedCompaniesRelational",
+  "batch_size": 15000,
+  "total_rows": 100000000,
+  "embedding_dimension": 128,
+  "enable_vss_index": false
+}
