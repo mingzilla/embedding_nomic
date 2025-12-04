@@ -1,3 +1,5 @@
+## Requirement
+
 this is a c# project, the goal is to 
 - implement batch text embedding with the `nomic-ai/nomic-embed-text-v1.5` from huggingface
 - i want the solution to work like `example_code` - this is the project with python code. i was told to convert this into c#
@@ -15,3 +17,20 @@ this is a c# project, the goal is to
   - so the end goal for this project needs to achieve 2 things:
     - embed for duckdb: input.duckdb -> embed (CompanyName) -> output.duckdb (with CompanyNumber, CompanyName, embedding float[128])
     - embed for text: single text embedding
+- Additional requirement for the c# project
+  - should not support stop and resume - go for simplicity
+  - should support cuda gpu processing
+  - should support setting the max record count "total_rows", just so that we can test this with 100 records
+  - should allow defining batch_size
+  - should allow defining embedding_dimension, by doing so, it can scale down from 768 to 128 for the creation of this db column to store the data
+
+### Embedding Generation
+
+```text
+duckdb/parquet                 duckdb
+| companies |                  | companies |
+|-----------|                  |-----------|
+| id        |                  | id        |
+| name      | -> [generate] -> | name      |
+|           |                  | embedding |
+```
