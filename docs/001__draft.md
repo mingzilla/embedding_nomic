@@ -1,0 +1,17 @@
+this is a c# project, the goal is to 
+- implement batch text embedding with the `nomic-ai/nomic-embed-text-v1.5` from huggingface
+- i want the solution to work like `example_code` - this is the project with python code. i was told to convert this into c#
+  - basically this should read the data/ClassifiedCompaniesRelational.duckdb file
+  - batch create text (defined in example_code/embedding_config.json) into embeddings
+  - it should save the result into a table also defined in this embedding_config.json file into the target duckdb file
+  - so the output duckdb file should include 3 columns: CompanyNumber, CompanyName, embedding
+- the c# version will need to be simpler. 
+  - we don't need json file config, 
+  - we just list all the config variables on the top of the Program.cs file
+  - my colleagues can't be asked to have any config, they just want a simple script that does one thing
+  - in terms of managing downloading the model and doing the embedding, we need them to be in separate classes
+    - please have a method that takes a string, and return the embedding 
+    - this is because later we will need to call this method to get the embedding, and then use the embedding to do similarity search from the duckdb file
+  - so the end goal for this project needs to achieve 2 things:
+    - embed for duckdb: input.duckdb -> embed (CompanyName) -> output.duckdb (with CompanyNumber, CompanyName, embedding float[128])
+    - embed for text: single text embedding

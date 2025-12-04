@@ -1,0 +1,12 @@
+{
+  "nomic-embed-text-v1.5": {
+    "model": "nomic-ai/nomic-embed-text-v1.5",
+    "docker-image-name": "mingzilla/api_nomic-embed-text-v1.5",
+    "docker-image-version": "1.0.5",
+    "features": "English-only,Fast,8k,Matryoshka",
+    "trust_remote_code": true,
+    "max_input_chars": 32768,
+    "matryoshka_dims": [768, 512, 256, 128, 64],
+    "extra_dependencies": ["einops"]
+  }
+}
