@@ -13,8 +13,4 @@
     <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.25.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="data\" />
-  </ItemGroup>
-
 </Project>
