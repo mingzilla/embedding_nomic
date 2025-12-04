@@ -34,3 +34,7 @@ duckdb/parquet                 duckdb
 | name      | -> [generate] -> | name      |
 |           |                  | embedding |
 ```
+
+## Code
+
+Please have code organised with classes, and use static methods wherever appropriate because i really want pure logic process in static methods.
