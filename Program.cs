@@ -5,8 +5,8 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using DuckDB.NET.Data;
-using LLamaSharp.KernelMemory;
-using Microsoft.SemanticKernel.AI.Embeddings;
+using LLama;
+using LLama.Common;
 
 public class Program
 {
@@ -35,11 +35,11 @@ public class Program
         await ModelManager.DownloadModel(HuggingFaceRepo, ModelFileName, fullModelPath);
 
         // 3. Initialize the embedding service
-        var embeddingService = new EmbeddingService(fullModelPath);
+        using var embeddingService = new EmbeddingService(fullModelPath, EmbeddingDimension);
 
         // 4. Perform single text embedding example
         string sampleText = "This is a test sentence for embedding.";
-        float[] sampleEmbedding = embeddingService.GenerateEmbedding(sampleText);
+        float[] sampleEmbedding = await embeddingService.GenerateEmbedding(sampleText);
         Console.WriteLine($"Generated embedding for sample text with dimension: {sampleEmbedding.Length}");
         Console.WriteLine($"First 5 values: {string.Join(", ", sampleEmbedding.Take(5))}");
 
@@ -75,8 +75,8 @@ public class Program
 
             Console.WriteLine($"Processing batch from offset {offset} with {textBatch.Count} records.");
 
-            var embeddings = embeddingService.GenerateEmbeddings(textBatch);
-            
+            var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+
             await InsertBatch(connection, idBatch, textBatch, embeddings);
         }
 
@@ -87,7 +87,7 @@ public class Program
     {
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $"SELECT COUNT(*) FROM {SourceTableName}";
-        return (long)cmd.ExecuteScalar();
+        return (long)(cmd.ExecuteScalar() ?? 0L);
     }
 
     private static (List<string> ids, List<string> texts) ReadBatch(DuckDBConnection connection, int offset, int limit)
@@ -107,13 +107,10 @@ public class Program
     
     private static async Task InsertBatch(DuckDBConnection connection, List<string> ids, List<string> texts, List<float[]> embeddings)
     {
-        // DuckDB ADO.NET provider doesn't support array parameters well for bulk insertion yet.
-        // We'll use transactions and individual inserts for robustness.
         using var transaction = connection.BeginTransaction();
         for(int i = 0; i < ids.Count; i++)
         {
             using var cmd = connection.CreateCommand();
-            // Convert float array to DuckDB LIST literal format
             var embeddingString = $"[{string.Join(", ", embeddings[i])}]";
             cmd.CommandText = $"INSERT INTO {DestTableName} VALUES (?, ?, {embeddingString});";
             cmd.Parameters.Add(new DuckDBParameter(ids[i]));
@@ -171,8 +168,10 @@ public static class ModelManager
 public class EmbeddingService : IDisposable
 {
     private readonly LLamaEmbedder _embedder;
+    private readonly LLamaWeights _weights;
+    private readonly int _embeddingDimension;
 
-    public EmbeddingService(string modelPath)
+    public EmbeddingService(string modelPath, int embeddingDimension)
     {
         var parameters = new ModelParams(modelPath)
         {
@@ -180,36 +179,42 @@ public class EmbeddingService : IDisposable
             GpuLayerCount = 100, // Offload all layers to GPU
             Embeddings = true
         };
-        using var weights = LLamaWeights.LoadFromFile(parameters);
-        _embedder = new LLamaEmbedder(weights, parameters);
+        _weights = LLamaWeights.LoadFromFile(parameters);
+        _embedder = new LLamaEmbedder(_weights, parameters);
+        _embeddingDimension = embeddingDimension;
     }
 
-    public float[] GenerateEmbedding(string text)
+    public async Task<float[]> GenerateEmbedding(string text)
     {
-        var embedding = _embedder.GetEmbeddings(text).ToArray();
-        // Nomic specific: dimensionality reduction is handled by the model if configured.
-        // We need to ensure the model itself is set up for 128 dimensions if possible.
-        // If the model always returns 768, we might need to truncate or warn.
-        // For now, we assume the model respects some config or we truncate.
-        if (embedding.Length > Program.EmbeddingDimension)
+        // Nomic models require a prefix for optimal performance.
+        string prefixedText = "search_document: " + text;
+
+        // The call to GetEmbeddings is asynchronous.
+        var embeddingMemory = await _embedder.GetEmbeddings(prefixedText);
+        float[] embedding = embeddingMemory.ToArray();
+
+        // The nomic model supports variable dimensionality, but LLamaSharp does not directly expose this.
+        // As a workaround, we truncate the embedding to the desired dimension.
+        if (embedding.Length > _embeddingDimension)
         {
-            return embedding.Take(Program.EmbeddingDimension).ToArray();
+            // Using the C# 8 range operator for slicing.
+            float[] truncatedEmbedding = embedding[.._embeddingDimension];
+            return truncatedEmbedding;
         }
         return embedding;
     }
 
-    public List<float[]> GenerateEmbeddings(List<string> texts)
+    public async Task<List<float[]>> GenerateEmbeddings(List<string> texts)
     {
-        var embeddings = new List<float[]>();
-        foreach (var text in texts)
-        {
-            embeddings.Add(GenerateEmbedding(text));
-        }
-        return embeddings;
+        // Note: This parallel execution can cause issues if the underlying LLamaEmbedder is not thread-safe.
+        var embeddingTasks = texts.Select(GenerateEmbedding).ToList();
+        var results = await Task.WhenAll(embeddingTasks);
+        return results.ToList();
     }
 
     public void Dispose()
     {
         _embedder.Dispose();
+        _weights.Dispose();
     }
 }
