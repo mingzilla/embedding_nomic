@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using LLama;
 using LLama.Common;
 
-public class Embed
+public class Program
 {
     // Configuration
     const string text = "hello";
@@ -28,16 +28,18 @@ public class Embed
 
         // Generate embedding for "hello"
         Console.WriteLine($"\nGenerating embedding for text: \"{text}\"");
-        float[] embedding = await GenerateEmbedding(fullModelPath, text, EmbeddingDimension);
+        float[] embedding = GenerateEmbedding(fullModelPath, text, EmbeddingDimension);
 
         Console.WriteLine($"\nEmbedding generated successfully!");
         Console.WriteLine($"Dimension: {embedding.Length}");
-        Console.WriteLine($"First 10 values: {string.Join(", ", embedding.Take(10).Select(v => v.ToString("F6")))}");
-        Console.WriteLine($"Last 10 values: {string.Join(", ", embedding.Skip(embedding.Length - 10).Select(v => v.ToString("F6")))}");
+        Console.WriteLine($"First 10 values: [{string.Join(", ", embedding.Take(10).Select(v => v.ToString("F6")))}]");
+        Console.WriteLine($"Last 10 values: [{string.Join(", ", embedding.Skip(embedding.Length - 10).Select(v => v.ToString("F6")))}]");
     }
 
-    public static async Task<float[]> GenerateEmbedding(string modelPath, string text, int embeddingDimension)
+    public static float[] GenerateEmbedding(string modelPath, string text, int embeddingDimension)
     {
+        Console.WriteLine("Loading model...");
+
         var parameters = new ModelParams(modelPath)
         {
             ContextSize = 1024,
@@ -48,12 +50,14 @@ public class Embed
         using var weights = LLamaWeights.LoadFromFile(parameters);
         using var embedder = new LLamaEmbedder(weights, parameters);
 
+        Console.WriteLine("Model loaded. Generating embedding...");
+
         // Nomic models require a prefix for optimal performance
         string prefixedText = "search_document: " + text;
 
-        Console.WriteLine("Generating embedding...");
-        var embeddingMemory = await embedder.GetEmbeddings(prefixedText);
-        float[] embedding = embeddingMemory.ToArray();
+        // GetEmbeddings returns ReadOnlySpan<float>, convert to array
+        var embeddingSpan = embedder.GetEmbeddings(prefixedText);
+        float[] embedding = embeddingSpan.ToArray();
 
         Console.WriteLine($"Original embedding dimension: {embedding.Length}");
 
@@ -61,7 +65,9 @@ public class Embed
         if (embedding.Length > embeddingDimension)
         {
             Console.WriteLine($"Truncating to dimension: {embeddingDimension}");
-            return embedding[..embeddingDimension];
+            float[] truncated = new float[embeddingDimension];
+            Array.Copy(embedding, truncated, embeddingDimension);
+            return truncated;
         }
 
         return embedding;
