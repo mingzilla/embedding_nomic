@@ -21,8 +21,8 @@ public class Program
     const string DestTableName = "companies_with_embeddings";
     const string TextColumnName = "CompanyName";
     const string IdColumnName = "CompanyNumber";
-    const int TotalRows = 100; // Set to -1 to process all rows
-    const int BatchSize = 50;
+    const int TotalRows = 100000; // Set to -1 to process all rows
+    const int BatchSize = 15000;
     const int EmbeddingDimension = 128; // Target dimension
 
     public static async Task Main(string[] args)
@@ -98,18 +98,21 @@ public class Program
         {
             using (var timer = new SimpleTimer($"Processing batch from offset {offset}").Start())
             {
-                var (idBatch, textBatch) = ReadBatch(inputConnection, offset, BatchSize);
+                // Step 1: Read raw batch data from database
+                var batchData = ReadBatchRaw(inputConnection, offset, BatchSize);
                 timer.Track("sql_read");
 
-                if (textBatch.Count == 0) break;
+                if (batchData.Count == 0) break;
 
-                // Minimal processing placeholder
-                int recordCount = textBatch.Count;
+                // Step 2: Extract and process raw data into separate ID and text lists
+                var (idBatch, textBatch) = ProcessBatchData(batchData);
                 timer.Track("processing");
 
+                // Step 3: Generate embeddings
                 var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
                 timer.Track("embedding");
 
+                // Step 4: Write results to output database
                 await InsertBatch(outputConnection, idBatch, textBatch, embeddings);
                 timer.Track("db_write_bulk");
             }
@@ -125,17 +128,27 @@ public class Program
         return (long)(cmd.ExecuteScalar() ?? 0L);
     }
 
-    private static (List<string> ids, List<string> texts) ReadBatch(DuckDBConnection connection, int offset, int limit)
+    private static List<(string id, string text)> ReadBatchRaw(DuckDBConnection connection, int offset, int limit)
     {
-        var ids = new List<string>();
-        var texts = new List<string>();
+        var batchData = new List<(string id, string text)>();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} LIMIT {limit} OFFSET {offset};";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            ids.Add(reader.GetString(0));
-            texts.Add(reader.GetString(1));
+            batchData.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        return batchData;
+    }
+
+    private static (List<string> ids, List<string> texts) ProcessBatchData(List<(string id, string text)> batchData)
+    {
+        var ids = new List<string>();
+        var texts = new List<string>();
+        foreach (var row in batchData)
+        {
+            ids.Add(row.id);
+            texts.Add(row.text);
         }
         return (ids, texts);
     }

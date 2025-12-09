@@ -121,7 +121,7 @@ public class SimpleTimer : IDisposable
         }
         maxLabelWidth = Math.Max(maxLabelWidth, $"TOTAL: {totalMs}ms".Length);
 
-        var lines = new List<string> { "" }; // Start with empty line for break
+        var lines = new List<string>(); // No leading blank line
 
         // Add each step with percentage
         foreach (var (name, durationMs) in _tracks)
@@ -130,7 +130,7 @@ public class SimpleTimer : IDisposable
             string label = $"[{name}: {durationMs}ms]";
             bool isBottleneck = (name == bottleneckName);
 
-            // Format: "  05.30% - [step_name: 123ms]" with optional bottleneck marker
+            // Format: "  05.30% - [step_name: 123ms]" with optional bottleneck marker (2 spaces indentation)
             string line = $"  {percentage:00.00}% - {label.PadRight(maxLabelWidth)}";
             if (isBottleneck)
             {
@@ -162,5 +162,6 @@ public class SimpleTimer : IDisposable
             : ConstructTabularMessage();
 
         Console.WriteLine(logMessage);
+        Console.WriteLine(); // Blank line after timing summary
     }
 }
