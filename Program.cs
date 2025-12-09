@@ -21,8 +21,8 @@ public class Program
     const string DestTableName = "companies_with_embeddings";
     const string TextColumnName = "CompanyName";
     const string IdColumnName = "CompanyNumber";
-    const int TotalRows = 100000; // Set to -1 to process all rows
-    const int BatchSize = 15000;
+    const int TotalRows = 1000; // Set to -1 to process all rows
+    const int BatchSize = 500;
     const int EmbeddingDimension = 128; // Target dimension
 
     public static async Task Main(string[] args)
@@ -223,8 +223,10 @@ public class EmbeddingService : IDisposable
     {
         var parameters = new ModelParams(modelPath)
         {
-            ContextSize = 1024,
-            GpuLayerCount = 100, // Offload all layers to GPU
+            ContextSize = 8192,      // Match nomic-embed model context size
+            BatchSize = 8192,        // Enable large batch processing at token level
+            UBatchSize = 8192,       // Must equal BatchSize for non-causal (embedding) models
+            GpuLayerCount = 999,     // Offload ALL layers to GPU
             Embeddings = true,
         };
         _weights = LLamaWeights.LoadFromFile(parameters);
@@ -254,7 +256,8 @@ public class EmbeddingService : IDisposable
 
     public async Task<List<float[]>> GenerateEmbeddings(List<string> texts)
     {
-        // Process embeddings sequentially since LLamaEmbedder is not thread-safe
+        // LLamaSharp doesn't expose batch API well, so we still process sequentially
+        // However, with increased BatchSize and ContextSize, each call should be faster
         var results = new List<float[]>();
         foreach (var text in texts)
         {
