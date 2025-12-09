@@ -96,14 +96,23 @@ public class Program
 
         for (int offset = 0; offset < rowsToProcess; offset += BatchSize)
         {
-            var (idBatch, textBatch) = ReadBatch(inputConnection, offset, BatchSize);
-            if (textBatch.Count == 0) break;
+            using (var timer = new SimpleTimer($"Processing batch from offset {offset}").Start())
+            {
+                var (idBatch, textBatch) = ReadBatch(inputConnection, offset, BatchSize);
+                timer.Track("sql_read");
 
-            Console.WriteLine($"Processing batch from offset {offset} with {textBatch.Count} records.");
+                if (textBatch.Count == 0) break;
 
-            var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+                // Minimal processing placeholder
+                int recordCount = textBatch.Count;
+                timer.Track("processing");
 
-            await InsertBatch(outputConnection, idBatch, textBatch, embeddings);
+                var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+                timer.Track("embedding");
+
+                await InsertBatch(outputConnection, idBatch, textBatch, embeddings);
+                timer.Track("db_write_bulk");
+            }
         }
 
         Console.WriteLine($"DuckDB processing finished. Output saved to '{OutputDbPath}'.");
