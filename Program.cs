@@ -15,6 +15,7 @@ public class Program
     const string ModelFileName = "nomic-embed-text-v1.5.f16.gguf";
     const string ModelPath = "./model";
     const string DbPath = "data/ClassifiedCompaniesRelational.duckdb";
+    const string OutputDbPath = "data/output.duckdb";
     const string SourceTableName = "ClassifiedCompaniesRelational";
     const string DestTableName = "companies_with_embeddings";
     const string TextColumnName = "CompanyName";
@@ -53,34 +54,48 @@ public class Program
     private static async Task ProcessDuckDb(EmbeddingService embeddingService)
     {
         Console.WriteLine("\nStarting DuckDB processing...");
-        using var connection = new DuckDBConnection($"Data Source={DbPath}");
-        connection.Open();
 
-        // Create or clear the destination table
-        using (var cmd = connection.CreateCommand())
+        // Ensure output directory exists
+        string outputDir = Path.GetDirectoryName(OutputDbPath);
+        if (!string.IsNullOrEmpty(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+        }
+
+        // Open connection to input database for reading
+        using var inputConnection = new DuckDBConnection($"Data Source={DbPath}");
+        inputConnection.Open();
+
+        // Open connection to output database for writing
+        using var outputConnection = new DuckDBConnection($"Data Source={OutputDbPath}");
+        outputConnection.Open();
+
+        // Create or clear the destination table in output database
+        using (var cmd = outputConnection.CreateCommand())
         {
             cmd.CommandText = $"CREATE OR REPLACE TABLE {DestTableName} (CompanyNumber VARCHAR, CompanyName VARCHAR, embedding FLOAT[{EmbeddingDimension}]);";
             cmd.ExecuteNonQuery();
         }
 
-        long totalRows = GetTotalRows(connection);
+        long totalRows = GetTotalRows(inputConnection);
         long rowsToProcess = (TotalRows > 0 && TotalRows < totalRows) ? TotalRows : totalRows;
 
-        Console.WriteLine($"Processing {rowsToProcess} rows from '{SourceTableName}' in batches of {BatchSize}...");
+        Console.WriteLine($"Processing {rowsToProcess} rows from '{SourceTableName}' in '{DbPath}'...");
+        Console.WriteLine($"Writing results to '{OutputDbPath}'...");
 
         for (int offset = 0; offset < rowsToProcess; offset += BatchSize)
         {
-            var (idBatch, textBatch) = ReadBatch(connection, offset, BatchSize);
+            var (idBatch, textBatch) = ReadBatch(inputConnection, offset, BatchSize);
             if (textBatch.Count == 0) break;
 
             Console.WriteLine($"Processing batch from offset {offset} with {textBatch.Count} records.");
 
             var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
 
-            await InsertBatch(connection, idBatch, textBatch, embeddings);
+            await InsertBatch(outputConnection, idBatch, textBatch, embeddings);
         }
 
-        Console.WriteLine("DuckDB processing finished.");
+        Console.WriteLine($"DuckDB processing finished. Output saved to '{OutputDbPath}'.");
     }
 
     private static long GetTotalRows(DuckDBConnection connection)
