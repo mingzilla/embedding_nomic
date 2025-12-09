@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using DuckDB.NET.Data;
 using LLama;
 using LLama.Common;
+using LLama.Native;
 
 public class Program
 {
@@ -26,6 +27,16 @@ public class Program
 
     public static async Task Main(string[] args)
     {
+        // Suppress verbose llama.cpp logging
+        NativeLibraryConfig.Instance.WithLogCallback((level, message) =>
+        {
+            // Only log errors, suppress all info/debug/warning messages
+            if (level == LLamaLogLevel.Error)
+            {
+                Console.Error.WriteLine($"[Error] {message}");
+            }
+        });
+
         Console.WriteLine("Starting embedding process...");
 
         // Ensure model directory exists
@@ -192,7 +203,7 @@ public class EmbeddingService : IDisposable
         {
             ContextSize = 1024,
             GpuLayerCount = 100, // Offload all layers to GPU
-            Embeddings = true
+            Embeddings = true,
         };
         _weights = LLamaWeights.LoadFromFile(parameters);
         _embedder = new LLamaEmbedder(_weights, parameters);
