@@ -1,83 +1,133 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using DuckDB.NET.Data;
 using LLama;
 using LLama.Common;
 
 public class Program
 {
-    // Configuration
-    const string text = "MARINE AND GENERAL MUTUAL LIFE ASSURANCE SOCIETY";
+    // 1. Configuration
     const string HuggingFaceRepo = "nomic-ai/nomic-embed-text-v1.5-GGUF";
     const string ModelFileName = "nomic-embed-text-v1.5.f16.gguf";
     const string ModelPath = "./model";
-    const int EmbeddingDimension = 128;
+    const string DbPath = "data/ClassifiedCompaniesRelational.duckdb";
+    const string SourceTableName = "ClassifiedCompaniesRelational";
+    const string DestTableName = "companies_with_embeddings";
+    const string TextColumnName = "CompanyName";
+    const string IdColumnName = "CompanyNumber";
+    const int TotalRows = 100; // Set to -1 to process all rows
+    const int BatchSize = 50;
+    const int EmbeddingDimension = 128; // Target dimension
 
     public static async Task Main(string[] args)
     {
-        Console.WriteLine("Starting simple embedding test...\n");
+        Console.WriteLine("Starting embedding process...");
 
         // Ensure model directory exists
         Directory.CreateDirectory(ModelPath);
         string fullModelPath = Path.Combine(ModelPath, ModelFileName);
 
-        // Download the model if it doesn't exist
-        await DownloadModelIfNeeded(HuggingFaceRepo, ModelFileName, fullModelPath);
+        // 2. Download the model if it doesn't exist
+        await ModelManager.DownloadModel(HuggingFaceRepo, ModelFileName, fullModelPath);
 
-        // Generate embedding for "hello"
-        Console.WriteLine($"\nGenerating embedding for text: \"{text}\"");
-        float[] embedding = await GenerateEmbedding(fullModelPath, text, EmbeddingDimension);
+        // 3. Initialize the embedding service
+        using var embeddingService = new EmbeddingService(fullModelPath, EmbeddingDimension);
 
-        Console.WriteLine($"\nEmbedding generated successfully!");
-        Console.WriteLine($"Dimension: {embedding.Length}");
-        Console.WriteLine($"First 10 values: [{string.Join(", ", embedding.Take(10).Select(v => v.ToString("F6")))}]");
-        Console.WriteLine($"Last 10 values: [{string.Join(", ", embedding.Skip(embedding.Length - 10).Select(v => v.ToString("F6")))}]");
+        // 4. Perform single text embedding example
+        string sampleText = "This is a test sentence for embedding.";
+        float[] sampleEmbedding = await embeddingService.GenerateEmbedding(sampleText);
+        Console.WriteLine($"Generated embedding for sample text with dimension: {sampleEmbedding.Length}");
+        Console.WriteLine($"First 5 values: {string.Join(", ", sampleEmbedding.Take(5))}");
+
+
+        // 5. Perform batch embedding for DuckDB
+        await ProcessDuckDb(embeddingService);
+
+        Console.WriteLine("Embedding process finished.");
     }
 
-    public static async Task<float[]> GenerateEmbedding(string modelPath, string text, int embeddingDimension)
+    private static async Task ProcessDuckDb(EmbeddingService embeddingService)
     {
-        Console.WriteLine("Loading model...");
+        Console.WriteLine("\nStarting DuckDB processing...");
+        using var connection = new DuckDBConnection($"Data Source={DbPath}");
+        connection.Open();
 
-        var parameters = new ModelParams(modelPath)
+        // Create or clear the destination table
+        using (var cmd = connection.CreateCommand())
         {
-            ContextSize = 1024,
-            GpuLayerCount = 100, // Use GPU
-            Embeddings = true
-        };
-
-        using var weights = LLamaWeights.LoadFromFile(parameters);
-        using var embedder = new LLamaEmbedder(weights, parameters);
-
-        Console.WriteLine("Model loaded. Generating embedding...");
-
-        // Nomic models require a prefix for optimal performance
-        string prefixedText = "search_document: " + text;
-
-        // GetEmbeddings returns Task<IReadOnlyList<float[]>>, await and get first result
-        var embeddingsList = await embedder.GetEmbeddings(prefixedText);
-        float[] embedding = embeddingsList[0];
-
-        Console.WriteLine($"Original embedding dimension: {embedding.Length}");
-
-        // Truncate to desired dimension if needed
-        if (embedding.Length > embeddingDimension)
-        {
-            Console.WriteLine($"Truncating to dimension: {embeddingDimension}");
-            float[] truncated = new float[embeddingDimension];
-            Array.Copy(embedding, truncated, embeddingDimension);
-            return truncated;
+            cmd.CommandText = $"CREATE OR REPLACE TABLE {DestTableName} (CompanyNumber VARCHAR, CompanyName VARCHAR, embedding FLOAT[{EmbeddingDimension}]);";
+            cmd.ExecuteNonQuery();
         }
 
-        return embedding;
+        long totalRows = GetTotalRows(connection);
+        long rowsToProcess = (TotalRows > 0 && TotalRows < totalRows) ? TotalRows : totalRows;
+
+        Console.WriteLine($"Processing {rowsToProcess} rows from '{SourceTableName}' in batches of {BatchSize}...");
+
+        for (int offset = 0; offset < rowsToProcess; offset += BatchSize)
+        {
+            var (idBatch, textBatch) = ReadBatch(connection, offset, BatchSize);
+            if (textBatch.Count == 0) break;
+
+            Console.WriteLine($"Processing batch from offset {offset} with {textBatch.Count} records.");
+
+            var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+
+            await InsertBatch(connection, idBatch, textBatch, embeddings);
+        }
+
+        Console.WriteLine("DuckDB processing finished.");
     }
 
-    public static async Task DownloadModelIfNeeded(string repo, string modelFile, string destPath)
+    private static long GetTotalRows(DuckDBConnection connection)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM {SourceTableName}";
+        return (long)(cmd.ExecuteScalar() ?? 0L);
+    }
+
+    private static (List<string> ids, List<string> texts) ReadBatch(DuckDBConnection connection, int offset, int limit)
+    {
+        var ids = new List<string>();
+        var texts = new List<string>();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} LIMIT {limit} OFFSET {offset};";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            ids.Add(reader.GetString(0));
+            texts.Add(reader.GetString(1));
+        }
+        return (ids, texts);
+    }
+
+    private static async Task InsertBatch(DuckDBConnection connection, List<string> ids, List<string> texts, List<float[]> embeddings)
+    {
+        using var transaction = connection.BeginTransaction();
+        for(int i = 0; i < ids.Count; i++)
+        {
+            using var cmd = connection.CreateCommand();
+            var embeddingString = $"[{string.Join(", ", embeddings[i])}]";
+            cmd.CommandText = $"INSERT INTO {DestTableName} VALUES (?, ?, {embeddingString});";
+            cmd.Parameters.Add(new DuckDBParameter(ids[i]));
+            cmd.Parameters.Add(new DuckDBParameter(texts[i]));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        transaction.Commit();
+    }
+}
+
+public static class ModelManager
+{
+    public static async Task DownloadModel(string repo, string modelFile, string destPath)
     {
         if (File.Exists(destPath))
         {
-            Console.WriteLine($"Model already exists at: {destPath}");
+            Console.WriteLine("Model already exists. Skipping download.");
             return;
         }
 
@@ -85,8 +135,6 @@ public class Program
         string url = $"https://huggingface.co/{repo}/resolve/main/{modelFile}";
 
         using var client = new HttpClient();
-        client.Timeout = TimeSpan.FromMinutes(30); // Long timeout for large model files
-
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
 
@@ -98,7 +146,6 @@ public class Program
         var buffer = new byte[8192];
         long downloadedBytes = 0;
         int bytesRead;
-
         while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
         {
             await fileStream.WriteAsync(buffer, 0, bytesRead);
@@ -107,14 +154,71 @@ public class Program
             if (totalBytes.HasValue)
             {
                 double percentage = (double)downloadedBytes / totalBytes.Value * 100;
-                Console.Write($"\rDownloading: {downloadedBytes / 1024.0 / 1024.0:F2} MB / {totalBytes.Value / 1024.0 / 1024.0:F2} MB ({percentage:F2}%)");
+                Console.Write($"\rDownloading: {downloadedBytes / 1024 / 1024:F2} MB / {totalBytes.Value / 1024 / 1024:F2} MB ({percentage:F2}%)");
             }
             else
             {
-                Console.Write($"\rDownloading: {downloadedBytes / 1024.0 / 1024.0:F2} MB");
+                 Console.Write($"\rDownloading: {downloadedBytes / 1024 / 1024:F2} MB");
             }
         }
+        Console.WriteLine("\nDownload complete.");
+    }
+}
 
-        Console.WriteLine("\nDownload complete!");
+public class EmbeddingService : IDisposable
+{
+    private readonly LLamaEmbedder _embedder;
+    private readonly LLamaWeights _weights;
+    private readonly int _embeddingDimension;
+
+    public EmbeddingService(string modelPath, int embeddingDimension)
+    {
+        var parameters = new ModelParams(modelPath)
+        {
+            ContextSize = 1024,
+            GpuLayerCount = 100, // Offload all layers to GPU
+            Embeddings = true
+        };
+        _weights = LLamaWeights.LoadFromFile(parameters);
+        _embedder = new LLamaEmbedder(_weights, parameters);
+        _embeddingDimension = embeddingDimension;
+    }
+
+    public async Task<float[]> GenerateEmbedding(string text)
+    {
+        // Nomic models require a prefix for optimal performance.
+        string prefixedText = "search_document: " + text;
+
+        // The call to GetEmbeddings is asynchronous and returns IReadOnlyList<float[]>
+        var embeddingsList = await _embedder.GetEmbeddings(prefixedText);
+        float[] embedding = embeddingsList[0];
+
+        // The nomic model supports variable dimensionality, but LLamaSharp does not directly expose this.
+        // As a workaround, we truncate the embedding to the desired dimension.
+        if (embedding.Length > _embeddingDimension)
+        {
+            float[] truncatedEmbedding = new float[_embeddingDimension];
+            Array.Copy(embedding, truncatedEmbedding, _embeddingDimension);
+            return truncatedEmbedding;
+        }
+        return embedding;
+    }
+
+    public async Task<List<float[]>> GenerateEmbeddings(List<string> texts)
+    {
+        // Process embeddings sequentially since LLamaEmbedder is not thread-safe
+        var results = new List<float[]>();
+        foreach (var text in texts)
+        {
+            var embedding = await GenerateEmbedding(text);
+            results.Add(embedding);
+        }
+        return results;
+    }
+
+    public void Dispose()
+    {
+        _embedder.Dispose();
+        _weights.Dispose();
     }
 }
