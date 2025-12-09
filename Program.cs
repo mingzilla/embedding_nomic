@@ -132,7 +132,7 @@ public class Program
     {
         var batchData = new List<(string id, string text)>();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} LIMIT {limit} OFFSET {offset};";
+        cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} ORDER BY {IdColumnName} ASC LIMIT {limit} OFFSET {offset};";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
