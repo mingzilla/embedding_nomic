@@ -524,14 +524,14 @@ Input: "Hello world"
     |   [Inference on CPU+GPU hybrid]
     |
     +--ONNX Path-->
-        |
-        [Load .onnx file]
-            |
-            v
-        [ONNX Runtime] --> CUDA Execution Provider
-            |
-            v
-        [Inference on GPU]
+    |   |
+    |   [Load .onnx file]
+    |       |
+    |       v
+    |   [ONNX Runtime] --> CUDA Execution Provider
+    |       |
+    |       v
+    |   [Inference on GPU]
     |
     v
 [Output: embeddings or generated text]
