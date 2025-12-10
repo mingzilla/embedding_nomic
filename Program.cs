@@ -13,7 +13,7 @@ public class Program
     // Configuration
     const string text = "MARINE AND GENERAL MUTUAL LIFE ASSURANCE SOCIETY";
     const string HuggingFaceRepo = "nomic-ai/nomic-embed-text-v1.5";
-    const string ModelFileName = "model.onnx";
+    const string ModelFileName = "nomic-embed-text-v1.5.onnx";
     const string VocabFileName = "vocab.txt";
     const string ModelPath = "./model/onnx";
     const int EmbeddingDimension = 128;
@@ -63,10 +63,20 @@ public class Program
 
         // The old code had an unnecessary `await Task.CompletedTask;`, which is removed.
 
-        // Load ONNX model
+        // Load ONNX model and attempt to use CUDA provider
         Console.WriteLine("Loading ONNX model...");
         var sessionOptions = new SessionOptions();
-        sessionOptions.AppendExecutionProvider_CUDA(0); // Use GPU
+        try
+        {
+            Console.WriteLine("Attempting to use CUDA execution provider...");
+            sessionOptions.AppendExecutionProvider_CUDA(0);
+            Console.WriteLine("CUDA execution provider successfully loaded.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to load CUDA execution provider. ONNX Runtime will fall back to CPU. Error: {ex.Message}");
+        }
+
         using var session = new InferenceSession(modelPath, sessionOptions);
 
         Console.WriteLine("Running inference...");
