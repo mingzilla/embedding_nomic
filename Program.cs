@@ -58,6 +58,7 @@ public class Program
         var tokenIds = tokenizer.EncodeToIds(prefixedText);
         var inputIds = tokenIds.Select(id => (long)id).ToArray();
         var attentionMask = Enumerable.Repeat(1L, inputIds.Length).ToArray();
+        var tokenTypeIds = Enumerable.Repeat(0L, inputIds.Length).ToArray();
 
         Console.WriteLine($"Tokenized to {inputIds.Length} tokens");
 
@@ -84,19 +85,61 @@ public class Program
         // Prepare input tensors
         var inputIdsTensor = new DenseTensor<long>(inputIds, new[] { 1, inputIds.Length });
         var attentionMaskTensor = new DenseTensor<long>(attentionMask, new[] { 1, attentionMask.Length });
+        var tokenTypeIdsTensor = new DenseTensor<long>(tokenTypeIds, new[] { 1, tokenTypeIds.Length });
 
         var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
-            NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor)
+            NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor),
+            NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeIdsTensor)
         };
 
         // Run inference
         using var results = session.Run(inputs);
 
-        // Extract sentence embedding
-        var sentenceEmbedding = results.First(r => r.Name == "sentence_embedding").AsTensor<float>();
-        float[] embedding = sentenceEmbedding.ToArray();
+        // Extract the last_hidden_state tensor, which contains the embeddings for each token.
+        var lastHiddenStateTensor = results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
+
+        // --- Perform Mean Pooling ---
+        // Get the dimensions of the tensor and the data as a span.
+        var dimensions = lastHiddenStateTensor.Dimensions;
+        var sequenceLength = (int)dimensions[1];
+        var hiddenSize = (int)dimensions[2];
+        var lastHiddenStateData = lastHiddenStateTensor.ToDenseTensor().Buffer.Span;
+
+        // Create an array to hold the pooled embedding.
+        var pooledEmbedding = new float[hiddenSize];
+        
+        // Count the number of active tokens (where attention_mask is 1).
+        var activeTokenCount = attentionMask.Count(m => m == 1);
+
+        if (activeTokenCount > 0)
+        {
+            // Iterate through each token's embedding in the sequence.
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                // Only consider tokens that are not padding.
+                if (attentionMask[i] == 1)
+                {
+                    // Get a slice of the data representing the current token's embedding.
+                    var tokenEmbedding = lastHiddenStateData.Slice(i * hiddenSize, hiddenSize);
+                    
+                    // Add the current token's embedding to the pooled embedding.
+                    for (int j = 0; j < hiddenSize; j++)
+                    {
+                        pooledEmbedding[j] += tokenEmbedding[j];
+                    }
+                }
+            }
+
+            // Divide the summed embeddings by the number of active tokens to get the mean.
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                pooledEmbedding[j] /= activeTokenCount;
+            }
+        }
+
+        float[] embedding = pooledEmbedding;
 
         Console.WriteLine($"Original embedding dimension: {embedding.Length}");
 
