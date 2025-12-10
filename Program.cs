@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using DuckDB.NET.Data;
 using LLama;
 using LLama.Common;
+using LLama.Native;
 
 public class Program
 {
@@ -15,16 +16,27 @@ public class Program
     const string ModelFileName = "nomic-embed-text-v1.5.f16.gguf";
     const string ModelPath = "./model";
     const string DbPath = "data/ClassifiedCompaniesRelational.duckdb";
-    const string SourceTableName = "companies";
+    const string OutputDbPath = "data/output1.duckdb";
+    const string SourceTableName = "ClassifiedCompaniesRelational";
     const string DestTableName = "companies_with_embeddings";
     const string TextColumnName = "CompanyName";
     const string IdColumnName = "CompanyNumber";
-    const int TotalRows = 100; // Set to -1 to process all rows
-    const int BatchSize = 50;
+    const int TotalRows = 1000; // Set to -1 to process all rows
+    const int BatchSize = 500;
     const int EmbeddingDimension = 128; // Target dimension
 
     public static async Task Main(string[] args)
     {
+        // Suppress verbose llama.cpp logging
+        NativeLibraryConfig.Instance.WithLogCallback((level, message) =>
+        {
+            // Only log errors, suppress all info/debug/warning messages
+            if (level == LLamaLogLevel.Error)
+            {
+                Console.Error.WriteLine($"[Error] {message}");
+            }
+        });
+
         Console.WriteLine("Starting embedding process...");
 
         // Ensure model directory exists
@@ -53,34 +65,60 @@ public class Program
     private static async Task ProcessDuckDb(EmbeddingService embeddingService)
     {
         Console.WriteLine("\nStarting DuckDB processing...");
-        using var connection = new DuckDBConnection($"Data Source={DbPath}");
-        connection.Open();
 
-        // Create or clear the destination table
-        using (var cmd = connection.CreateCommand())
+        // Ensure output directory exists
+        string outputDir = Path.GetDirectoryName(OutputDbPath);
+        if (!string.IsNullOrEmpty(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+        }
+
+        // Open connection to input database for reading
+        using var inputConnection = new DuckDBConnection($"Data Source={DbPath}");
+        inputConnection.Open();
+
+        // Open connection to output database for writing
+        using var outputConnection = new DuckDBConnection($"Data Source={OutputDbPath}");
+        outputConnection.Open();
+
+        // Create or clear the destination table in output database
+        using (var cmd = outputConnection.CreateCommand())
         {
             cmd.CommandText = $"CREATE OR REPLACE TABLE {DestTableName} (CompanyNumber VARCHAR, CompanyName VARCHAR, embedding FLOAT[{EmbeddingDimension}]);";
             cmd.ExecuteNonQuery();
         }
 
-        long totalRows = GetTotalRows(connection);
+        long totalRows = GetTotalRows(inputConnection);
         long rowsToProcess = (TotalRows > 0 && TotalRows < totalRows) ? TotalRows : totalRows;
-        
-        Console.WriteLine($"Processing {rowsToProcess} rows from '{SourceTableName}' in batches of {BatchSize}...");
+
+        Console.WriteLine($"Processing {rowsToProcess} rows from '{SourceTableName}' in '{DbPath}'...");
+        Console.WriteLine($"Writing results to '{OutputDbPath}'...");
 
         for (int offset = 0; offset < rowsToProcess; offset += BatchSize)
         {
-            var (idBatch, textBatch) = ReadBatch(connection, offset, BatchSize);
-            if (textBatch.Count == 0) break;
+            using (var timer = new SimpleTimer($"Processing batch from offset {offset}").Start())
+            {
+                // Step 1: Read raw batch data from database
+                var batchData = ReadBatchRaw(inputConnection, offset, BatchSize);
+                timer.Track("sql_read");
 
-            Console.WriteLine($"Processing batch from offset {offset} with {textBatch.Count} records.");
+                if (batchData.Count == 0) break;
 
-            var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+                // Step 2: Extract and process raw data into separate ID and text lists
+                var (idBatch, textBatch) = ProcessBatchData(batchData);
+                timer.Track("processing");
 
-            await InsertBatch(connection, idBatch, textBatch, embeddings);
+                // Step 3: Generate embeddings
+                var embeddings = await embeddingService.GenerateEmbeddings(textBatch);
+                timer.Track("embedding");
+
+                // Step 4: Write results to output database
+                await InsertBatch(outputConnection, idBatch, textBatch, embeddings);
+                timer.Track("db_write_bulk");
+            }
         }
 
-        Console.WriteLine("DuckDB processing finished.");
+        Console.WriteLine($"DuckDB processing finished. Output saved to '{OutputDbPath}'.");
     }
 
     private static long GetTotalRows(DuckDBConnection connection)
@@ -90,21 +128,31 @@ public class Program
         return (long)(cmd.ExecuteScalar() ?? 0L);
     }
 
-    private static (List<string> ids, List<string> texts) ReadBatch(DuckDBConnection connection, int offset, int limit)
+    private static List<(string id, string text)> ReadBatchRaw(DuckDBConnection connection, int offset, int limit)
     {
-        var ids = new List<string>();
-        var texts = new List<string>();
+        var batchData = new List<(string id, string text)>();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} LIMIT {limit} OFFSET {offset};";
+        cmd.CommandText = $"SELECT {IdColumnName}, {TextColumnName} FROM {SourceTableName} ORDER BY {IdColumnName} ASC LIMIT {limit} OFFSET {offset};";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            ids.Add(reader.GetString(0));
-            texts.Add(reader.GetString(1));
+            batchData.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        return batchData;
+    }
+
+    private static (List<string> ids, List<string> texts) ProcessBatchData(List<(string id, string text)> batchData)
+    {
+        var ids = new List<string>();
+        var texts = new List<string>();
+        foreach (var row in batchData)
+        {
+            ids.Add(row.id);
+            texts.Add(row.text);
         }
         return (ids, texts);
     }
-    
+
     private static async Task InsertBatch(DuckDBConnection connection, List<string> ids, List<string> texts, List<float[]> embeddings)
     {
         using var transaction = connection.BeginTransaction();
@@ -133,7 +181,7 @@ public static class ModelManager
 
         Console.WriteLine($"Downloading model '{modelFile}' from '{repo}'...");
         string url = $"https://huggingface.co/{repo}/resolve/main/{modelFile}";
-        
+
         using var client = new HttpClient();
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
@@ -142,7 +190,7 @@ public static class ModelManager
 
         using var contentStream = await response.Content.ReadAsStreamAsync();
         using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-        
+
         var buffer = new byte[8192];
         long downloadedBytes = 0;
         int bytesRead;
@@ -175,9 +223,11 @@ public class EmbeddingService : IDisposable
     {
         var parameters = new ModelParams(modelPath)
         {
-            ContextSize = 1024,
-            GpuLayerCount = 100, // Offload all layers to GPU
-            Embeddings = true
+            ContextSize = 8192,      // Match nomic-embed model context size
+            BatchSize = 8192,        // Enable large batch processing at token level
+            UBatchSize = 8192,       // Must equal BatchSize for non-causal (embedding) models
+            GpuLayerCount = 999,     // Offload ALL layers to GPU
+            Embeddings = true,
         };
         _weights = LLamaWeights.LoadFromFile(parameters);
         _embedder = new LLamaEmbedder(_weights, parameters);
@@ -189,16 +239,16 @@ public class EmbeddingService : IDisposable
         // Nomic models require a prefix for optimal performance.
         string prefixedText = "search_document: " + text;
 
-        // The call to GetEmbeddings is asynchronous.
-        var embeddingMemory = await _embedder.GetEmbeddings(prefixedText);
-        float[] embedding = embeddingMemory.ToArray();
+        // The call to GetEmbeddings is asynchronous and returns IReadOnlyList<float[]>
+        var embeddingsList = await _embedder.GetEmbeddings(prefixedText);
+        float[] embedding = embeddingsList[0];
 
         // The nomic model supports variable dimensionality, but LLamaSharp does not directly expose this.
         // As a workaround, we truncate the embedding to the desired dimension.
         if (embedding.Length > _embeddingDimension)
         {
-            // Using the C# 8 range operator for slicing.
-            float[] truncatedEmbedding = embedding[.._embeddingDimension];
+            float[] truncatedEmbedding = new float[_embeddingDimension];
+            Array.Copy(embedding, truncatedEmbedding, _embeddingDimension);
             return truncatedEmbedding;
         }
         return embedding;
@@ -206,10 +256,15 @@ public class EmbeddingService : IDisposable
 
     public async Task<List<float[]>> GenerateEmbeddings(List<string> texts)
     {
-        // Note: This parallel execution can cause issues if the underlying LLamaEmbedder is not thread-safe.
-        var embeddingTasks = texts.Select(GenerateEmbedding).ToList();
-        var results = await Task.WhenAll(embeddingTasks);
-        return results.ToList();
+        // LLamaSharp doesn't expose batch API well, so we still process sequentially
+        // However, with increased BatchSize and ContextSize, each call should be faster
+        var results = new List<float[]>();
+        foreach (var text in texts)
+        {
+            var embedding = await GenerateEmbedding(text);
+            results.Add(embedding);
+        }
+        return results;
     }
 
     public void Dispose()
