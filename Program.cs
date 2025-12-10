@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using BERTTokenizers;
+using Microsoft.ML.Tokenizers;
 
 public class Program
 {
@@ -46,21 +46,22 @@ public class Program
     {
         Console.WriteLine("Loading tokenizer...");
 
-        // Load BERT tokenizer (using BertUncasedBaseTokenizer)
-        var tokenizer = new BertUncasedBaseTokenizer(vocabPath);
+        // Create a BertTokenizer from the vocabulary file.
+        using var vocabStream = File.OpenRead(vocabPath);
+        var tokenizer = BertTokenizer.Create(vocabStream);
 
         // Add task prefix for nomic models
         string prefixedText = "search_document: " + text;
 
         // Tokenize
         Console.WriteLine("Tokenizing text...");
-        var tokens = tokenizer.Tokenize(prefixedText);
-        var inputIds = tokenizer.ConvertTokensToIds(tokens).Select(id => (long)id).ToArray();
+        var tokenIds = tokenizer.EncodeToIds(prefixedText);
+        var inputIds = tokenIds.Select(id => (long)id).ToArray();
         var attentionMask = Enumerable.Repeat(1L, inputIds.Length).ToArray();
 
         Console.WriteLine($"Tokenized to {inputIds.Length} tokens");
 
-        await Task.CompletedTask; // To satisfy async method signature
+        // The old code had an unnecessary `await Task.CompletedTask;`, which is removed.
 
         // Load ONNX model
         Console.WriteLine("Loading ONNX model...");
