@@ -16,7 +16,7 @@ public class Program
     const string ModelFileName = "nomic-embed-text-v1.5.f16.gguf";
     const string ModelPath = "./model";
     const string DbPath = "data/ClassifiedCompaniesRelational.duckdb";
-    const string OutputDbPath = "data/output1.duckdb";
+    const string OutputDbPath = "data/output_test.duckdb";
     const string SourceTableName = "ClassifiedCompaniesRelational";
     const string DestTableName = "companies_with_embeddings";
     const string TextColumnName = "CompanyName";

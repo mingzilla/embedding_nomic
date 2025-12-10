@@ -20,12 +20,12 @@ using System.Linq;
 /// </summary>
 public class SimpleTimer : IDisposable
 {
-    private readonly string _message;
+    private readonly string? _message;
     private readonly Stopwatch _stopwatch;
     private readonly List<(string name, long durationMs)> _tracks;
     private long _lastTrackMs;
 
-    public SimpleTimer(string message = null)
+    public SimpleTimer(string? message = null)
     {
         _message = message;
         _stopwatch = new Stopwatch();
@@ -107,7 +107,7 @@ public class SimpleTimer : IDisposable
         var totalMs = ElapsedMs;
 
         // Find bottleneck (step with max duration)
-        string bottleneckName = null;
+        string? bottleneckName = null;
         if (_tracks.Any())
         {
             bottleneckName = _tracks.OrderByDescending(t => t.durationMs).First().name;
