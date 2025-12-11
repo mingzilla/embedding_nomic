@@ -41,7 +41,7 @@
          |
          +--CONVERT-->
                 |
-                +--[GGUF] (LLamaSharp, llama.cpp)
+                +--[GGUF] (llama.cpp, LLamaSharp)
                 |
                 +--[ONNX] (ONNX Runtime, cross-platform)
 
@@ -58,7 +58,7 @@ Typical release of a model includes:
     - (community-provided, not always official)
     - ONNX is a conversion format for deployment
 
-## GGUF Models
+## GGUF Models - (llama.cpp specific)
 
 **GGUF = GPT-Generated Unified Format**
 
@@ -125,7 +125,7 @@ Typical release of a model includes:
 2. **Convert** PyTorch model to **GGUF** using llama.cpp tools
 3. **Run inference** efficiently with llama.cpp (especially on CPU/low-resource devices)
 
-## ONNX Models
+## ONNX Models - (cross platform)
 
 **ONNX = Open Neural Network Exchange**
 
