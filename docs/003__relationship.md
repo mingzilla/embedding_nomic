@@ -107,6 +107,24 @@ Typical release of a model includes:
     +-- llama-cpp-python (Python bindings for llama.cpp)
 ```
 
+### **PyTorch** and **llama.cpp** relationship
+
+**PyTorch** and **llama.cpp** are **different tools for different stages**:
+
+| PyTorch (trains models)                      | llama.cpp (runs models - GGUF format)         |
+|----------------------------------------------|-----------------------------------------------|
+| **Training framework** (also does inference) | **Inference-only engine**                     |
+| Python-based, flexible, research-friendly    | C++-based, lightweight, portable              |
+| Uses `.bin`/`.safetensors` models            | Uses **GGUF** models (converted from PyTorch) |
+| Needs GPU/CUDA for speed                     | CPU-first, GPU optional                       |
+| Full ecosystem (transformers, diffusers)     | Minimal dependencies, standalone binary       |
+
+### **Relationship:**
+
+1. **Train/fine-tune** in PyTorch → output: `.safetensors`
+2. **Convert** PyTorch model to **GGUF** using llama.cpp tools
+3. **Run inference** efficiently with llama.cpp (especially on CPU/low-resource devices)
+
 ## ONNX Models
 
 **ONNX = Open Neural Network Exchange**
