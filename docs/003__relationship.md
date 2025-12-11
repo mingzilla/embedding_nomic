@@ -32,8 +32,8 @@
          |   +- **.bin / .safetensors** = PyTorch file formats that store parameters
          |
          |-- Model config (config.json)
-         |   |- describes the model architecture - e.g. num_hidden_layers
-         |   +- config.json is framework-agnostic (not PyTorch specific)
+         |   |- a model must have config.json, regardless if trained by PyTorch or TensorFlow
+         |   +- config.json describes the model architecture - e.g. num_hidden_layers
          |
          |-- Tokenizer - uses files (tokenizer.json, vocab.txt)
          |   |- runs an algorithm to split text, this uses tokenizer.json
@@ -153,12 +153,12 @@ Example:
 [Original HuggingFace Model]
     |
     +-- Contains:
-         |
-         +-- PyTorch weights (model.safetensors or pytorch_model.bin)
-         +-- Config (config.json)
-         +-- Tokenizer (tokenizer.json, tokenizer_config.json)
-         +-- Vocab (vocab.txt or in tokenizer.json)
-         +-- Model architecture code (modeling_*.py)
+    |    |
+    |    +-- PyTorch weights (model.safetensors or pytorch_model.bin)
+    |    +-- Config (config.json)
+    |    +-- Tokenizer (tokenizer.json, tokenizer_config.json)
+    |    +-- Vocab (vocab.txt or in tokenizer.json)
+    |    +-- Model architecture code (modeling_*.py)
     |
     v
 [Conversion Process]
