@@ -49,6 +49,15 @@ Note:
 (TensorFlow vs PyTorch) == (Angular vs React)
 ```
 
+Typical release of a model includes:
+
+- **PyTorch** weights (.safetensors or .bin)
+- **Tokenizer** files (tokenizer.json, vocab.txt, etc.)
+- **Config** (config.json)
+- Sometimes **GGUF** or **ONNX** conversions
+    - (community-provided, not always official)
+    - ONNX is a conversion format for deployment
+
 ## GGUF Models
 
 **GGUF = GPT-Generated Unified Format**
@@ -109,7 +118,26 @@ Note:
 | **Optimization**     | Hardware-specific optimizations                  |
 | **Interoperability** | Convert between PyTorch, TensorFlow, etc.        |
 
-**ONNX Structure:**
+**ONNX Runtime** is like the **JVM/JRE** for ONNX models - it’s the runtime that executes the model on different platforms.
+
+### **Java Analogy:**
+
+| Java World               | ONNX World               |
+|--------------------------|--------------------------|
+| `.java` source           | PyTorch/TF trained model |
+| `.class` bytecode        | `.onnx` model file       |
+| JVM (Java VM)            | ONNX Runtime             |
+| Write once, run anywhere | Train once, run anywhere |
+
+### **Example platforms with their “JVM” for ONNX:**
+
+- **Windows GPU** → ONNX Runtime + CUDA
+- **macOS** → ONNX Runtime + CoreML
+- **Android** → ONNX Runtime + NNAPI
+- **Raspberry Pi** → ONNX Runtime (CPU)
+- **NVIDIA Jetson** → ONNX Runtime + TensorRT
+
+### **ONNX Structure:**
 
 ```
 [ONNX Model Directory]
