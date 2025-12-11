@@ -44,6 +44,9 @@
                 +--[GGUF] (LLamaSharp, llama.cpp)
                 |
                 +--[ONNX] (ONNX Runtime, cross-platform)
+
+Note:
+(TensorFlow vs PyTorch) == (Angular vs React)
 ```
 
 ## GGUF Models
