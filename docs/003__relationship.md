@@ -230,7 +230,7 @@ PyTorch Model
     |
     |--llama.cpp tools--> [GGUF] --> llama.cpp ecosystem
     |   |                              |
-    |   +-- convert_hf_to_gguf.py     +-- llama.cpp (C++)
+    |   +-- convert_hf_to_gguf.py      +-- llama.cpp (C++)
     |   +-- quantize tool              +-- LLamaSharp (C#)
     |                                  +-- llama-cpp-python
     |                                  +-- koboldcpp
