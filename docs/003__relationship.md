@@ -1,13 +1,43 @@
 # Model Formats and Frameworks Explanation
 
+## Table of Contents
+
+- **Model Formats**
+    - [Model Format Hierarchy](#model-format-hierarchy)
+    - [GGUF Models](#gguf-models)
+    - [ONNX Models](#onnx-models)
+    - [Relationship to Original HuggingFace Model](#relationship-to-original-huggingface-model)
+
+- **Inference Frameworks**
+    - [Framework Relationships](#framework-relationships)
+    - [Framework Comparison Table](#framework-comparison-table)
+
+- **Infrastructure & Tools**
+    - [Tokenizers](#tokenizers)
+    - [CUDA Relationships](#cuda-relationships)
+
+- **Examples & Reference**
+    - [Complete Pipeline Example](#complete-pipeline-example)
+    - [Summary Table](#summary-table)
+    - [Original Query](#original-query)
+
 ## Model Format Hierarchy
 
 ```
 [Original HuggingFace Model]
          |
-         |-- PyTorch weights (.bin, .safetensors)
+         |-- Parameters: weights & biases
+         |   |- **PyTorch** = framework for training/running ML models
+         |   |- **Weights & biases** = the learned parameters
+         |   +- **.bin / .safetensors** = PyTorch file formats that store parameters
+         |
          |-- Model config (config.json)
-         |-- Tokenizer files (tokenizer.json, vocab.txt)
+         |   |- describes the model architecture - e.g. num_hidden_layers
+         |   +- config.json is framework-agnostic (not PyTorch specific)
+         |
+         |-- Tokenizer - uses files (tokenizer.json, vocab.txt)
+         |   |- runs an algorithm to split text, this uses tokenizer.json
+         |   +- converts tokens into numbers, this uses vocab.txt
          |
          +--CONVERT-->
                 |
