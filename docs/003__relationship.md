@@ -637,18 +637,18 @@ Input: "Hello world"
 
 ## Summary Table
 
-| Component             | Purpose                          | Related To                      |
-|-----------------------|----------------------------------|---------------------------------|
-| **HuggingFace Model** | Original trained model           | PyTorch weights, full ecosystem |
-| **GGUF**              | Efficient CPU/GPU inference      | llama.cpp format specification  |
-| **ONNX**              | Cross-platform inference         | ONNX Runtime, multiple backends |
-| **PyTorch**           | Training and inference framework | HuggingFace native format       |
-| **vLLM**              | High-performance serving         | PyTorch models, CUDA            |
-| **llama.cpp**         | C++ inference engine             | GGUF creator, CPU-optimized     |
-| **LLamaSharp**        | C# inference library             | Wraps llama.cpp for .NET        |
-| **Tokenizer**         | Text ↔ Token conversion          | All formats need it             |
-| **CUDA**              | GPU acceleration                 | All frameworks can use it       |
-| **vocab.txt**         | Token ID mapping                 | Tokenization process            |
+| Category       | Component             | Purpose                          | Related To                      |
+|----------------|-----------------------|----------------------------------|---------------------------------|
+| Model Type     | **HuggingFace** Model | Original trained model           | PyTorch weights, full ecosystem |
+|                | **GGUF** Model        | Efficient CPU/GPU inference      | llama.cpp format specification  |
+|                | **ONNX** Model        | Cross-platform inference         | ONNX Runtime, multiple backends |
+| Model Tool     | **PyTorch**           | Training and inference framework | HuggingFace native format       |
+|                | **llama.cpp**         | C++ inference engine             | GGUF creator, CPU-optimized     |
+| Wrapper Runner | **vLLM**              | High-performance serving         | PyTorch models, CUDA            |
+|                | **LLamaSharp**        | C# inference library             | Wraps llama.cpp for .NET        |
+| Tokenizer      | **Tokenizer**         | Text ↔ Token conversion          | All formats need it             |
+|                | **vocab.txt**         | Token ID mapping                 | Tokenization process            |
+| CUDA           | **CUDA**              | GPU acceleration                 | All frameworks can use it       |
 
 ## Original Query
 
