@@ -387,6 +387,25 @@ PyTorch Model
 [.NET application] (your C# code)
 ```
 
+## **Model Format -> Runner**
+
+- **HF model** (PyTorch) → `vLLM`, `sentence-transformers`, `transformers` library, PyTorch directly
+- **GGUF model** → `llama.cpp` (and wrappers like LLamaSharp, llama-cpp-python)
+- **ONNX model** → `ONNX Runtime` (and compatible engines like TensorRT, DirectML)
+
+```
+[HuggingFace Model]
+   ├── vLLM (GPU-optimized serving)
+   ├── sentence-transformers (embeddings)
+   └── transformers library (general PyTorch inference)
+
+[GGUF Model]
+   └── llama.cpp (CPU-first, C++ inference)
+
+[ONNX Model]
+   └── ONNX Runtime (cross-platform, production)
+```
+
 ## Framework Comparison Table
 
 | Framework        | Format            | Language      | Runtime                 | GPU Support            | Use Case                   |
