@@ -13,7 +13,7 @@ public class Program
     // Configuration
     const string text = "MARINE AND GENERAL MUTUAL LIFE ASSURANCE SOCIETY";
     const string HuggingFaceRepo = "nomic-ai/nomic-embed-text-v1.5";
-    const string ModelFileName = "model.onnx";
+    const string ModelFileName = "nomic-embed-text-v1.5.onnx";
     const string VocabFileName = "vocab.txt";
     const string ModelPath = "./model/onnx";
     const int EmbeddingDimension = 128;
@@ -46,24 +46,38 @@ public class Program
     {
         Console.WriteLine("Loading tokenizer...");
 
-        // Load BERT tokenizer from vocab.txt
-        var tokenizer = await BertTokenizer.CreateAsync(vocabPath);
+        // Create a BertTokenizer from the vocabulary file.
+        using var vocabStream = File.OpenRead(vocabPath);
+        var tokenizer = BertTokenizer.Create(vocabStream);
 
         // Add task prefix for nomic models
         string prefixedText = "search_document: " + text;
 
         // Tokenize
         Console.WriteLine("Tokenizing text...");
-        var encoded = tokenizer.Encode(prefixedText);
-        var inputIds = encoded.Ids.Select(id => (long)id).ToArray();
-        var attentionMask = encoded.AttentionMask.Select(m => (long)m).ToArray();
+        var tokenIds = tokenizer.EncodeToIds(prefixedText);
+        var inputIds = tokenIds.Select(id => (long)id).ToArray();
+        var attentionMask = Enumerable.Repeat(1L, inputIds.Length).ToArray();
+        var tokenTypeIds = Enumerable.Repeat(0L, inputIds.Length).ToArray();
 
         Console.WriteLine($"Tokenized to {inputIds.Length} tokens");
 
-        // Load ONNX model
+        // The old code had an unnecessary `await Task.CompletedTask;`, which is removed.
+
+        // Load ONNX model and attempt to use CUDA provider
         Console.WriteLine("Loading ONNX model...");
         var sessionOptions = new SessionOptions();
-        sessionOptions.AppendExecutionProvider_CUDA(0); // Use GPU
+        try
+        {
+            Console.WriteLine("Attempting to use CUDA execution provider...");
+            sessionOptions.AppendExecutionProvider_CUDA(0);
+            Console.WriteLine("CUDA execution provider successfully loaded.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Failed to load CUDA execution provider. ONNX Runtime will fall back to CPU. Error: {ex.Message}");
+        }
+
         using var session = new InferenceSession(modelPath, sessionOptions);
 
         Console.WriteLine("Running inference...");
@@ -71,19 +85,61 @@ public class Program
         // Prepare input tensors
         var inputIdsTensor = new DenseTensor<long>(inputIds, new[] { 1, inputIds.Length });
         var attentionMaskTensor = new DenseTensor<long>(attentionMask, new[] { 1, attentionMask.Length });
+        var tokenTypeIdsTensor = new DenseTensor<long>(tokenTypeIds, new[] { 1, tokenTypeIds.Length });
 
         var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
-            NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor)
+            NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor),
+            NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeIdsTensor)
         };
 
         // Run inference
         using var results = session.Run(inputs);
 
-        // Extract sentence embedding
-        var sentenceEmbedding = results.First(r => r.Name == "sentence_embedding").AsTensor<float>();
-        float[] embedding = sentenceEmbedding.ToArray();
+        // Extract the last_hidden_state tensor, which contains the embeddings for each token.
+        var lastHiddenStateTensor = results.First(r => r.Name == "last_hidden_state").AsTensor<float>();
+
+        // --- Perform Mean Pooling ---
+        // Get the dimensions of the tensor and the data as a span.
+        var dimensions = lastHiddenStateTensor.Dimensions;
+        var sequenceLength = (int)dimensions[1];
+        var hiddenSize = (int)dimensions[2];
+        var lastHiddenStateData = lastHiddenStateTensor.ToDenseTensor().Buffer.Span;
+
+        // Create an array to hold the pooled embedding.
+        var pooledEmbedding = new float[hiddenSize];
+
+        // Count the number of active tokens (where attention_mask is 1).
+        var activeTokenCount = attentionMask.Count(m => m == 1);
+
+        if (activeTokenCount > 0)
+        {
+            // Iterate through each token's embedding in the sequence.
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                // Only consider tokens that are not padding.
+                if (attentionMask[i] == 1)
+                {
+                    // Get a slice of the data representing the current token's embedding.
+                    var tokenEmbedding = lastHiddenStateData.Slice(i * hiddenSize, hiddenSize);
+
+                    // Add the current token's embedding to the pooled embedding.
+                    for (int j = 0; j < hiddenSize; j++)
+                    {
+                        pooledEmbedding[j] += tokenEmbedding[j];
+                    }
+                }
+            }
+
+            // Divide the summed embeddings by the number of active tokens to get the mean.
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                pooledEmbedding[j] /= activeTokenCount;
+            }
+        }
+
+        float[] embedding = pooledEmbedding;
 
         Console.WriteLine($"Original embedding dimension: {embedding.Length}");
 
