@@ -6,7 +6,7 @@
 |--------------|-----------------------|------------|--------------------------|--------------|-----------------------------------------|
 | build model  | PyTorch, TensorFlow   | HF model   | CUDA Toolkit 13          | PyTorch      | sentence-transformers, vLLM             |
 | convert GGUF | llama.cpp             | model.gguf | CUDA Toolkit 13          | llama.cpp    | LlamaSharp, llama-cpp-python, koboldcpp |
-| convert ONNX | PyTorch^, TensorFlow^ | model.onnx | CUDA Toolkit 12, cuDNN 9 | ONNX Runtime |                                         |
+| convert ONNX | PyTorch^, TensorFlow^ | model.onnx | CUDA Toolkit 12, cuDNN 9 | ONNX Runtime | TensorRT, DirectML                      |
 
 - PyTorch^ - torch.onnx.export()
 - TensorFlow^ - tf2onnx

@@ -25,38 +25,56 @@
 
 ```
 [Original HuggingFace Model]
-         |
-         |-- Parameters: weights & biases
-         |   |- **PyTorch** = framework for training/running ML models
-         |   |- **Weights & biases** = the learned parameters
-         |   +- **.bin / .safetensors** = PyTorch file formats that store parameters
-         |
-         |-- Model config (config.json)
-         |   |- a model must have config.json, regardless if trained by PyTorch or TensorFlow
-         |   +- config.json describes the model architecture - e.g. num_hidden_layers
-         |
-         |-- Tokenizer - uses files (tokenizer.json, vocab.txt)
-         |   |- runs an algorithm to split text, this uses tokenizer.json
-         |   +- converts tokens into numbers, this uses vocab.txt
-         |
-         +--CONVERT-->
-                |
-                +--[GGUF] (llama.cpp, LLamaSharp)
-                |
-                +--[ONNX] (ONNX Runtime, cross-platform)
+    |
+    +-- Contains:
+    |    |
+    |    +-- PyTorch Parameters
+    |    |   |-- **Weights & biases** = the learned parameters
+    |    |   +-- **.bin / .safetensors** = PyTorch file formats that store parameters
+    |    |
+    |    +-- Model Config (config.json)
+    |    |   |- a model must have config.json, regardless if trained by PyTorch or TensorFlow
+    |    |   +- config.json describes the model architecture - e.g. num_hidden_layers
+    |    |
+    |    +-- Tokenizer (tokenizer.json, tokenizer_config.json)
+    |        |- runs an algorithm to split text, this uses tokenizer.json
+    |        +- converts tokens into numbers, this uses vocab.txt
+    v
+[Conversion Process]
+    |
+    +--GGUF Conversion-->
+    |   |
+    |   +-- Extract weights
+    |   +-- Quantize (optional)
+    |   +-- Package into GGUF format
+    |   +-- Embeds tokenizer info
+    |
+    +--ONNX Conversion-->
+        |
+        +-- Export computational graph
+        +-- Optimize for ONNX Runtime
+        +-- Keep separate tokenizer files
 
 Note:
 (TensorFlow vs PyTorch) == (Angular vs React)
 ```
 
-Typical release of a model includes:
+**GGUF & ONNX - Conversion Flow:**
 
-- **PyTorch** weights (.safetensors or .bin)
-- **Tokenizer** files (tokenizer.json, vocab.txt, etc.)
-- **Config** (config.json)
-- Sometimes **GGUF** or **ONNX** conversions
-    - (community-provided, not always official)
-    - ONNX is a conversion format for deployment
+```
+PyTorch Model
+    |
+    |--llama.cpp tools--> [GGUF] --> llama.cpp ecosystem
+    |   |                              |
+    |   +-- convert_hf_to_gguf.py      +-- llama.cpp (C++)
+    |   +-- quantize tool              +-- LLamaSharp (C#)
+    |                                  +-- llama-cpp-python
+    |                                  +-- koboldcpp
+    |
+    |--torch.onnx.export()--> [ONNX] --> ONNX Runtime
+    |
+    |--quantize--> [Quantized GGUF/ONNX] --> smaller, faster
+```
 
 ### Summary
 
@@ -117,6 +135,30 @@ Typical release of a model includes:
     +-- koboldcpp (GUI/API wrapper around llama.cpp)
     +-- text-generation-webui (supports llama.cpp backend)
     +-- llama-cpp-python (Python bindings for llama.cpp)
+```
+
+**GGUF - llama.cpp Conversion Tools:**
+
+```
+[HuggingFace Model Directory]
+    |
+    v
+[convert_hf_to_gguf.py] (from llama.cpp repo)
+    |
+    +-- Reads PyTorch weights
+    +-- Extracts model architecture
+    +-- Converts to GGUF format
+    |
+    v
+[model-f16.gguf] (full precision)
+    |
+    v
+[llama-quantize] (optional)
+    |
+    +-- Applies quantization (q4_0, q4_K_M, q8_0, etc.)
+    |
+    v
+[model-q4_K_M.gguf] (quantized, smaller)
 ```
 
 ## ONNX Models - (cross platform)
@@ -187,232 +229,9 @@ Example:
     ...
 ```
 
-## Relationship to Original HuggingFace Model
-
-```
-[Original HuggingFace Model]
-    |
-    +-- Contains:
-    |    |
-    |    +-- PyTorch weights (model.safetensors or pytorch_model.bin)
-    |    +-- Config (config.json)
-    |    +-- Tokenizer (tokenizer.json, tokenizer_config.json)
-    |    +-- Vocab (vocab.txt or in tokenizer.json)
-    |    +-- Model architecture code (modeling_*.py)
-    |
-    v
-[Conversion Process]
-    |
-    +--GGUF Conversion-->
-    |   |
-    |   +-- Extract weights
-    |   +-- Quantize (optional)
-    |   +-- Package into GGUF format
-    |   +-- Embeds tokenizer info
-    |
-    +--ONNX Conversion-->
-        |
-        +-- Export computational graph
-        +-- Optimize for ONNX Runtime
-        +-- Keep separate tokenizer files
-```
-
-**Conversion Flow:**
-
-```
-PyTorch Model
-    |
-    |--llama.cpp tools--> [GGUF] --> llama.cpp ecosystem
-    |   |                              |
-    |   +-- convert_hf_to_gguf.py      +-- llama.cpp (C++)
-    |   +-- quantize tool              +-- LLamaSharp (C#)
-    |                                  +-- llama-cpp-python
-    |                                  +-- koboldcpp
-    |
-    |--torch.onnx.export()--> [ONNX] --> ONNX Runtime
-    |
-    |--quantize--> [Quantized GGUF/ONNX] --> smaller, faster
-```
-
-**llama.cpp Conversion Tools:**
-
-```
-[HuggingFace Model Directory]
-    |
-    v
-[convert_hf_to_gguf.py] (from llama.cpp repo)
-    |
-    +-- Reads PyTorch weights
-    +-- Extracts model architecture
-    +-- Converts to GGUF format
-    |
-    v
-[model-f16.gguf] (full precision)
-    |
-    v
-[llama-quantize] (optional)
-    |
-    +-- Applies quantization (q4_0, q4_K_M, q8_0, etc.)
-    |
-    v
-[model-q4_K_M.gguf] (quantized, smaller)
-```
-
-## Framework Relationships
-
-### PyTorch
-
-```
-[PyTorch]
-    |
-    +-- Original training framework
-    +-- Native format for HuggingFace models
-    +-- Full precision (fp32, fp16, bf16)
-    +-- Requires Python runtime
-    +-- Used for: training, fine-tuning, inference
-```
-
-**Relation:**
-
-```
-[HuggingFace Model] == [PyTorch Model]
-    |                       |
-    |                       +-- Uses torch.nn.Module
-    |                       +-- Saved as .bin or .safetensors
-    |
-    +--CONVERT--> [GGUF] or [ONNX]
-```
-
-### vLLM
-
-```
-[vLLM]
-    |
-    +-- High-performance inference engine
-    +-- Uses PagedAttention algorithm
-    +-- GPU-optimized (CUDA/ROCm)
-    +-- Reads PyTorch/HuggingFace models directly
-    +-- Does NOT use GGUF or ONNX
-```
-
-**vLLM Flow:**
-
-```
-[HuggingFace Model]
-    |
-    v
-[vLLM Engine]
-    |
-    +-- Load PyTorch weights
-    +-- Apply optimizations (PagedAttention, continuous batching)
-    +-- Serve via API (OpenAI-compatible)
-    |
-    v
-[High-throughput GPU inference]
-```
-
-### llama.cpp
-
-```
-[llama.cpp]
-    |
-    +-- Pure C/C++ implementation
-    +-- Creator and primary consumer of GGUF format
-    +-- CPU-optimized with GPU acceleration (CUDA, Metal, Vulkan)
-    +-- Minimal dependencies (no Python required)
-    +-- Cross-platform (Linux, macOS, Windows, mobile)
-    +-- Quantization support (reduces memory usage)
-```
-
-**llama.cpp Flow:**
-
-```
-[HuggingFace Model]
-    |
-    v
-[llama.cpp conversion tool]
-    |
-    +-- Extract PyTorch weights
-    +-- Quantize (optional: q4_0, q4_K_M, q8_0, etc.)
-    +-- Package into GGUF format
-    |
-    v
-[GGUF Model]
-    |
-    v
-[llama.cpp inference]
-    |
-    +-- Load model into memory
-    +-- Offload layers to GPU (optional)
-    +-- Run inference on CPU/GPU
-```
-
-**Key Features:**
-
-- **Quantization**: Reduces model size (e.g., 7B model from 13GB → 4GB)
-- **Hybrid execution**: Mix CPU and GPU processing
-- **Memory mapping**: Efficient model loading
-- **No framework dependencies**: Standalone C++ binary
-
-### LLamaSharp
-
-```
-[LLamaSharp]
-    |
-    +-- C# wrapper for llama.cpp
-    +-- Uses GGUF format ONLY
-    +-- Cross-platform (.NET)
-    +-- CPU + GPU support
-    +-- Exposes llama.cpp functionality to .NET
-```
-
-**LLamaSharp Flow:**
-
-```
-[GGUF Model]
-    |
-    v
-[llama.cpp C++ library] (native inference engine)
-    |
-    v
-[LLamaSharp C# bindings] (P/Invoke wrappers)
-    |
-    v
-[.NET application] (your C# code)
-```
-
-## **Model Format -> Runner**
-
-- **HF model** (PyTorch) → `vLLM`, `sentence-transformers`, `transformers` library, PyTorch directly
-- **GGUF model** → `llama.cpp` (and wrappers like LLamaSharp, llama-cpp-python)
-- **ONNX model** → `ONNX Runtime` (and compatible engines like TensorRT, DirectML)
-
-```
-[HuggingFace Model]
-   ├── vLLM (GPU-optimized serving)
-   ├── sentence-transformers (embeddings)
-   └── transformers library (general PyTorch inference)
-
-[GGUF Model]
-   └── llama.cpp (CPU-first, C++ inference)
-
-[ONNX Model]
-   └── ONNX Runtime (cross-platform, production)
-```
-
-## Framework Comparison Table
-
-| Framework        | Format            | Language      | Runtime                 | GPU Support            | Use Case                   |
-|------------------|-------------------|---------------|-------------------------|------------------------|----------------------------|
-| **PyTorch**      | .bin/.safetensors | Python        | PyTorch                 | CUDA, ROCm             | Training, research         |
-| **vLLM**         | PyTorch           | Python        | PyTorch + optimizations | CUDA, ROCm             | High-throughput serving    |
-| **llama.cpp**    | GGUF              | C++           | Native C++              | CUDA, Metal, Vulkan    | Consumer hardware, CPU     |
-| **LLamaSharp**   | GGUF              | C#            | .NET + llama.cpp        | CUDA, Metal, Vulkan    | .NET applications          |
-| **ONNX Runtime** | ONNX              | Python/C++/C# | ONNX Runtime            | CUDA, DirectML, CoreML | Cross-platform, production |
-
 ## Tokenizers
 
-**Tokenizer = Text ↔ Numbers Converter**
+**Tokenizer = Text -> Numbers Converter**
 
 ```
 [Tokenizer Role in Pipeline]
@@ -627,6 +446,129 @@ Input: "Hello world"
     |
     v
 [Output: embeddings or generated text]
+```
+
+## Specific Framework Details
+
+### PyTorch
+
+```
+[PyTorch]
+    |
+    +-- Original training framework
+    +-- Native format for HuggingFace models
+    +-- Full precision (fp32, fp16, bf16)
+    +-- Requires Python runtime
+    +-- Used for: training, fine-tuning, inference
+```
+
+**Relation:**
+
+```
+[HuggingFace Model] == [PyTorch Model]
+    |                       |
+    |                       +-- Uses torch.nn.Module
+    |                       +-- Saved as .bin or .safetensors
+    |
+    +--CONVERT--> [GGUF] or [ONNX]
+```
+
+### vLLM
+
+```
+[vLLM]
+    |
+    +-- High-performance inference engine
+    +-- Uses PagedAttention algorithm
+    +-- GPU-optimized (CUDA/ROCm)
+    +-- Reads PyTorch/HuggingFace models directly
+    +-- Does NOT use GGUF or ONNX
+```
+
+**vLLM Flow:**
+
+```
+[HuggingFace Model]
+    |
+    v
+[vLLM Engine]
+    |
+    +-- Load PyTorch weights
+    +-- Apply optimizations (PagedAttention, continuous batching)
+    +-- Serve via API (OpenAI-compatible)
+    |
+    v
+[High-throughput GPU inference]
+```
+
+### llama.cpp
+
+```
+[llama.cpp]
+    |
+    +-- Pure C/C++ implementation
+    +-- Creator and primary consumer of GGUF format
+    +-- CPU-optimized with GPU acceleration (CUDA, Metal, Vulkan)
+    +-- Minimal dependencies (no Python required)
+    +-- Cross-platform (Linux, macOS, Windows, mobile)
+    +-- Quantization support (reduces memory usage)
+```
+
+**llama.cpp Flow:**
+
+```
+[HuggingFace Model]
+    |
+    v
+[llama.cpp conversion tool]
+    |
+    +-- Extract PyTorch weights
+    +-- Quantize (optional: q4_0, q4_K_M, q8_0, etc.)
+    +-- Package into GGUF format
+    |
+    v
+[GGUF Model]
+    |
+    v
+[llama.cpp inference]
+    |
+    +-- Load model into memory
+    +-- Offload layers to GPU (optional)
+    +-- Run inference on CPU/GPU
+```
+
+**Key Features:**
+
+- **Quantization**: Reduces model size (e.g., 7B model from 13GB → 4GB)
+- **Hybrid execution**: Mix CPU and GPU processing
+- **Memory mapping**: Efficient model loading
+- **No framework dependencies**: Standalone C++ binary
+
+### LLamaSharp
+
+```
+[LLamaSharp]
+    |
+    +-- C# wrapper for llama.cpp
+    +-- Uses GGUF format ONLY
+    +-- Cross-platform (.NET)
+    +-- CPU + GPU support
+    +-- Exposes llama.cpp functionality to .NET
+```
+
+**LLamaSharp Flow:**
+
+```
+[GGUF Model]
+    |
+    v
+[llama.cpp C++ library] (native inference engine)
+    |
+    v
+[LLamaSharp C# bindings] (P/Invoke wrappers)
+    |
+    v
+[.NET application] (your C# code)
 ```
 
 ## Summary Table
