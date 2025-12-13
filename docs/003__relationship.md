@@ -58,6 +58,18 @@ Typical release of a model includes:
     - (community-provided, not always official)
     - ONNX is a conversion format for deployment
 
+### Summary
+
+| stage        | framework             | output     | latest cuda support      | base runner  | wrapper runner                          |
+|--------------|-----------------------|------------|--------------------------|--------------|-----------------------------------------|
+| build model  | PyTorch, TensorFlow   | HF model   | CUDA Toolkit 13          | PyTorch      | sentence-transformers, vLLM             |
+| convert GGUF | llama.cpp             | model.gguf | CUDA Toolkit 13          | llama.cpp    | LlamaSharp, llama-cpp-python, koboldcpp |
+| convert ONNX | PyTorch^, TensorFlow^ | model.onnx | CUDA Toolkit 12, cuDNN 9 | ONNX Runtime |                                         |
+
+- PyTorch^ - torch.onnx.export()
+- TensorFlow^ - tf2onnx
+- PyTorch, TensorFlow, llama.cpp - compatible with specific CUDA version used to compile the framework
+
 ## GGUF Models - (llama.cpp specific)
 
 **GGUF = GPT-Generated Unified Format**
@@ -73,7 +85,7 @@ Typical release of a model includes:
 | **Self-Contained** | Model weights + metadata in single file                |
 | **File Size**      | Smaller than original PyTorch models                   |
 
-**GGUF Structure:**
+### **GGUF Structure:**
 
 ```
 [GGUF File]
@@ -106,24 +118,6 @@ Typical release of a model includes:
     +-- text-generation-webui (supports llama.cpp backend)
     +-- llama-cpp-python (Python bindings for llama.cpp)
 ```
-
-### **PyTorch** and **llama.cpp** relationship
-
-**PyTorch** and **llama.cpp** are **different tools for different stages**:
-
-| PyTorch (trains models)                      | llama.cpp (runs models - GGUF format)         |
-|----------------------------------------------|-----------------------------------------------|
-| **Training framework** (also does inference) | **Inference-only engine**                     |
-| Python-based, flexible, research-friendly    | C++-based, lightweight, portable              |
-| Uses `.bin`/`.safetensors` models            | Uses **GGUF** models (converted from PyTorch) |
-| Needs GPU/CUDA for speed                     | CPU-first, GPU optional                       |
-| Full ecosystem (transformers, diffusers)     | Minimal dependencies, standalone binary       |
-
-### **Relationship:**
-
-1. **Train/fine-tune** in PyTorch → output: `.safetensors`
-2. **Convert** PyTorch model to **GGUF** using llama.cpp tools
-3. **Run inference** efficiently with llama.cpp (especially on CPU/low-resource devices)
 
 ## ONNX Models - (cross platform)
 
