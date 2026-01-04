@@ -1,10 +1,12 @@
-# Project creation
+# Visual Studio Instructions
+
+## Project creation
 - Console App
 - 
 
-# package
+## package
 - tools -> NuGet -> solution
 
-# Keyboard shortcuts
+## Keyboard shortcuts
 
 - Tools > Options > Environment > Keyboard > ReSharper
