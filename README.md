@@ -46,6 +46,7 @@ I cannot get this to work with GPU. This is because:
 
 - It requires cuda toolkit 12 and cuDNN 9 in order to be able to use GPU
 - I have cuda toolkit 13 installed, and I cannot successfully uninstall it
+- Note: run `nvidia-smi` to check CUDA version
 
 Conclusion:
 
