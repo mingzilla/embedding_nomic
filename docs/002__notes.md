@@ -7,3 +7,18 @@ CUDA Toolkit 12
 cuDNN v 9
 - CUDA Deep Neural Network library. It's a GPU-accelerated library of primitives for deep learning
 - compatible cuDNN package (e.g., cuDNN 9 for CUDA 12.x) - downloaded from the NVIDIA developer website
+
+---
+
+## Run .Net
+
+```text
+src/
+  AppA/
+    Program.cs (Main A)
+  AppB/
+    Program.cs (Main B)
+
+dotnet run --project src/AppA
+dotnet run --project src/AppB
+```
