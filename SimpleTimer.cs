@@ -43,10 +43,6 @@ public class SimpleTimer : IDisposable
     /// </summary>
     public SimpleTimer Start()
     {
-        if (_message != null)
-        {
-            Console.WriteLine(_message);
-        }
         _stopwatch.Start();
         _lastTrackMs = 0;
         return this;
@@ -161,6 +157,10 @@ public class SimpleTimer : IDisposable
             ? ConstructOneRowMessage()
             : ConstructTabularMessage();
 
+        if (_message != null)
+        {
+            Console.WriteLine(_message);
+        }
         Console.WriteLine(logMessage);
         Console.WriteLine(); // Blank line after timing summary
     }
